@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#bfe9ff">
+<title>Rubber Duck Catch</title>
+<style>
+  :root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --sky-h: 20%;
+    --bank-h: calc(72px + var(--safe-bottom));
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #bfe9ff;
+    font-family: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #23415a;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    touch-action: none;
+  }
+  #game { position: absolute; inset: 0; overflow: hidden; touch-action: none; }
+
+  /* ---------- Scenery ---------- */
+  #sky {
+    position: absolute; left: 0; right: 0; top: 0; height: var(--sky-h);
+    background: linear-gradient(#a9e0ff, #e3f6ff);
+  }
+  #sun {
+    position: absolute; right: calc(8% + var(--safe-right)); top: calc(var(--safe-top) + 56px);
+    width: 54px; height: 54px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, #fff6b0, #ffd84d);
+    box-shadow: 0 0 0 10px rgba(255, 230, 120, .35), 0 0 0 22px rgba(255, 230, 120, .15);
+  }
+  .cloud {
+    position: absolute; height: 26px; border-radius: 26px; background: #fff; opacity: .95;
+    animation: drift linear infinite;
+  }
+  .cloud::before, .cloud::after {
+    content: ""; position: absolute; background: #fff; border-radius: 50%;
+  }
+  .cloud::before { width: 34px; height: 34px; left: 12px; top: -16px; }
+  .cloud::after  { width: 24px; height: 24px; left: 38px; top: -10px; }
+  @keyframes drift { from { transform: translateX(-140px); } to { transform: translateX(110vw); } }
+
+  #water {
+    position: absolute; left: 0; right: 0; top: var(--sky-h); bottom: 0;
+    background: linear-gradient(#7fd6ee 0%, #4dbbe0 35%, #2f9fd2 75%, #2389c0 100%);
+  }
+  .waves {
+    position: absolute; left: 0; right: 0; height: 22px;
+    background-repeat: repeat-x; background-size: 80px 22px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='22'%3E%3Cpath d='M0 11 Q20 3 40 11 T80 11' fill='none' stroke='white' stroke-opacity='.45' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+    animation: waves 6s linear infinite;
+  }
+  .waves.slow { animation-duration: 10s; animation-direction: reverse; opacity: .6; }
+  @keyframes waves { from { background-position-x: 0; } to { background-position-x: 80px; } }
+  .edge {
+    position: absolute; left: 0; right: 0; top: -9px; height: 18px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='18'%3E%3Cpath d='M0 9 Q15 0 30 9 T60 9 V18 H0Z' fill='%237fd6ee'/%3E%3C/svg%3E");
+    background-size: 60px 18px; background-repeat: repeat-x;
+    animation: waves 5s linear infinite;
+  }
+  .pad { position: absolute; pointer-events: none; }
+
+  #bank {
+    position: absolute; left: 0; right: 0; bottom: 0; height: var(--bank-h);
+    background: linear-gradient(#8ddc6a, #5fbf4a);
+    border-top-left-radius: 50% 24px; border-top-right-radius: 50% 24px;
+    box-shadow: 0 -4px 0 rgba(255,255,255,.35) inset;
+    z-index: 2000;
+  }
+  .flower { position: absolute; font-size: 22px; bottom: calc(var(--safe-bottom) + 18px); }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: absolute; z-index: 5000; left: 0; right: 0; top: 0;
+    padding: calc(var(--safe-top) + 10px) calc(var(--safe-right) + 14px) 0 calc(var(--safe-left) + 14px);
+    display: flex; align-items: center; gap: 12px;
+    pointer-events: none;
+    transition: opacity .3s;
+  }
+  #hud.hidden { opacity: 0; }
+  #score {
+    flex: none; min-width: 96px;
+    background: #fff; border-radius: 999px; padding: 6px 16px 6px 10px;
+    font-size: 30px; font-weight: 800; line-height: 1.1;
+    box-shadow: 0 3px 0 rgba(35, 65, 90, .15);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .miniDuck { display: inline-block; width: 40px; }
+  .miniDuck.big { width: 72px; }
+  .miniDuck svg { width: 100%; height: auto; display: block; }
+  #score.bump { animation: bump .25s ease-out; }
+  @keyframes bump { 50% { transform: scale(1.18); } }
+  #timer {
+    flex: 1; display: flex; align-items: center; gap: 8px;
+    background: #fff; border-radius: 999px; padding: 8px 12px;
+    box-shadow: 0 3px 0 rgba(35, 65, 90, .15);
+    font-size: 22px;
+  }
+  #timerTrack { flex: 1; height: 16px; border-radius: 999px; background: #e3eef5; overflow: hidden; }
+  #timerFill {
+    height: 100%; width: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #6fdc8c, #42c776);
+    transform-origin: left center;
+  }
+  #timerFill.low { background: linear-gradient(90deg, #ffb35c, #ff8a3d); }
+
+  /* ---------- Ducks ---------- */
+  #ducks { position: absolute; inset: 0; }
+  .duck {
+    position: absolute; left: 0; top: 0;
+    display: flex; align-items: center; justify-content: center;
+    will-change: transform;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .duck svg { display: block; overflow: visible; will-change: transform; pointer-events: none; }
+  .duck.golden svg { filter: drop-shadow(0 0 6px rgba(255, 214, 64, .95)); }
+  .twinkle { animation: twinkle 1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .twinkle.b { animation-delay: .5s; }
+  @keyframes twinkle { 0%,100% { opacity: .2; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.1); } }
+
+  .net, .pop, .ripple, .spark { position: absolute; pointer-events: none; }
+  .net { z-index: 4000; }
+  .pop {
+    z-index: 4500; font-weight: 900; font-size: 34px; color: #fff;
+    -webkit-text-stroke: 2px #23415a; paint-order: stroke fill;
+    text-shadow: 0 3px 0 rgba(35,65,90,.25);
+    transform: translate(-50%, -50%);
+  }
+  .pop.gold { color: #ffd23f; font-size: 44px; }
+  .pop.pink { color: #ff9fca; font-size: 38px; }
+  .ripple {
+    width: 60px; height: 22px; margin: -11px 0 0 -30px;
+    border: 3px solid rgba(255,255,255,.8); border-radius: 50%;
+    z-index: 1;
+  }
+  .spark { font-size: 22px; z-index: 4400; transform: translate(-50%, -50%); }
+
+  #bucket {
+    position: absolute; z-index: 2100;
+    right: calc(var(--safe-right) + 18px);
+    bottom: calc(var(--safe-bottom) + 14px);
+    width: 84px; height: 84px;
+    pointer-events: none;
+  }
+  #bucket svg { width: 100%; height: 100%; overflow: visible; }
+  #bucket.wiggle { animation: wiggle .35s ease-out; }
+  @keyframes wiggle { 25% { transform: rotate(-10deg) scale(1.08); } 60% { transform: rotate(7deg) scale(1.04); } }
+
+  /* ---------- Screens ---------- */
+  .screen {
+    position: absolute; inset: 0; z-index: 9000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    padding: calc(var(--safe-top) + 20px) 20px calc(var(--safe-bottom) + 20px);
+    background: rgba(191, 233, 255, .55);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    transition: opacity .35s;
+  }
+  .screen.hidden { opacity: 0; pointer-events: none; }
+  .bigDuck { width: min(54vw, 230px); animation: bob 2.2s ease-in-out infinite; }
+  .bigDuck svg { width: 100%; height: auto; display: block; overflow: visible; }
+  @keyframes bob { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-12px) rotate(4deg); } }
+  .title { font-size: 30px; font-weight: 900; color: #23415a; letter-spacing: .5px; text-align: center; }
+  .roundBtn {
+    width: 132px; height: 132px; border-radius: 50%; border: 0;
+    background: radial-gradient(circle at 35% 30%, #ffe680, #ffc93c 60%, #f5ab1d);
+    box-shadow: 0 8px 0 #d98e0c, 0 14px 24px rgba(35,65,90,.25);
+    font-size: 60px; color: #fff; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit; cursor: pointer;
+    -webkit-text-stroke: 1px rgba(160, 95, 0, .35);
+    animation: pulse 1.6s ease-in-out infinite;
+    touch-action: none;
+  }
+  .roundBtn:active { transform: translateY(6px); box-shadow: 0 2px 0 #d98e0c, 0 6px 12px rgba(35,65,90,.25); }
+  .roundBtn[disabled] { opacity: .5; animation: none; }
+  @keyframes pulse { 50% { transform: scale(1.06); } }
+  .pill {
+    background: #fff; border-radius: 999px; padding: 8px 22px;
+    font-size: 28px; font-weight: 800;
+    box-shadow: 0 3px 0 rgba(35, 65, 90, .15);
+  }
+  #endCount { font-size: 64px; font-weight: 900; display: flex; align-items: center; gap: 10px; }
+  #endMsg { font-size: 34px; font-weight: 900; color: #fff; -webkit-text-stroke: 2px #23415a; paint-order: stroke fill; text-align: center; }
+  #newBest { font-size: 76px; line-height: 1; display: none; }
+  #newBest.show { display: block; animation: starPop .6s cubic-bezier(.2, 1.6, .4, 1) both, spin 3s linear .6s infinite; }
+  @keyframes starPop { from { transform: scale(0) rotate(-180deg); } to { transform: scale(1) rotate(0); } }
+  @keyframes spin { 0%,100% { transform: rotate(-8deg) scale(1); } 50% { transform: rotate(8deg) scale(1.1); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cloud, .waves, .edge, .bigDuck, .roundBtn { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="sky">
+    <div id="sun"></div>
+    <div class="cloud" style="top:calc(var(--safe-top) + 74px); width:70px; animation-duration:48s; animation-delay:-12s"></div>
+    <div class="cloud" style="top:calc(var(--safe-top) + 104px); width:56px; animation-duration:64s; animation-delay:-40s; transform:scale(.8)"></div>
+  </div>
+  <div id="water">
+    <div class="edge"></div>
+    <div class="waves" style="top:12%"></div>
+    <div class="waves slow" style="top:30%"></div>
+    <div class="waves" style="top:50%"></div>
+    <div class="waves slow" style="top:70%"></div>
+    <div class="waves" style="top:86%"></div>
+    <svg class="pad" style="left:-14px; top:22%; width:70px" viewBox="0 0 60 40"><path d="M30 20 L58 14 A28 18 0 1 1 52 6 Z" fill="#6cc25a"/><path d="M30 20 L58 14 A28 18 0 1 1 52 6 Z" fill="none" stroke="#4fa544" stroke-width="2"/></svg>
+    <svg class="pad" style="right:-10px; top:58%; width:58px" viewBox="0 0 60 40"><path d="M30 20 L2 14 A28 18 0 1 0 8 6 Z" fill="#6cc25a"/><circle cx="22" cy="16" r="5" fill="#ff9fca"/><circle cx="22" cy="16" r="2" fill="#ffe680"/></svg>
+  </div>
+  <div id="ducks"></div>
+  <div id="bank">
+    <span class="flower" style="left:calc(var(--safe-left) + 14px)">🌼</span>
+    <span class="flower" style="left:calc(var(--safe-left) + 48px); font-size:18px; bottom:calc(var(--safe-bottom) + 30px)">🌷</span>
+    <span class="flower" style="left:38%; font-size:18px">🌼</span>
+  </div>
+  <div id="bucket" aria-hidden="true">
+    <svg viewBox="0 0 100 100">
+      <path d="M18 34 Q50 -8 82 34" fill="none" stroke="#8a9aa8" stroke-width="5" stroke-linecap="round"/>
+      <path d="M14 34 L86 34 L76 92 Q50 100 24 92 Z" fill="#ff7b7b"/>
+      <path d="M14 34 L86 34 L76 92 Q50 100 24 92 Z" fill="none" stroke="#e05a5a" stroke-width="3"/>
+      <path d="M20 58 L80 58" stroke="#fff" stroke-opacity=".6" stroke-width="6"/>
+      <ellipse cx="50" cy="34" rx="37" ry="9" fill="#d94e4e"/>
+      <ellipse cx="50" cy="34" rx="37" ry="9" fill="none" stroke="#ff9b9b" stroke-width="4"/>
+    </svg>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="score"><span class="miniDuck"></span><span id="scoreNum">0</span></div>
+    <div id="timer"><span>⏱</span><div id="timerTrack"><div id="timerFill"></div></div></div>
+  </div>
+
+  <div id="startScreen" class="screen">
+    <div class="bigDuck" id="startDuck"></div>
+    <div class="title">Duck Catch</div>
+    <button class="roundBtn" id="playBtn" aria-label="Play">▶</button>
+    <div class="pill" id="startBest">⭐ 0</div>
+  </div>
+
+  <div id="endScreen" class="screen hidden">
+    <div id="newBest">⭐</div>
+    <div id="endCount"><span class="miniDuck big"></span><span id="endNum">0</span></div>
+    <div id="endMsg">Great job!</div>
+    <button class="roundBtn" id="againBtn" aria-label="Play again">↻</button>
+    <div class="pill" id="endBest">⭐ 0</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Settings ----------
+  const ROUND_SECONDS = 60;
+  const BEST_KEY = 'duckBest';
+  const MIN_HIT = 76;            // px, minimum tap target for small fingers
+  const TYPES = {
+    normal: { value: 1, scale: 1.00, body: '#FFD93D', wing: '#F5B800', beak: '#FF8C42', speed: [6.5, 8.5] },
+    tiny:   { value: 2, scale: 0.62, body: '#FFB3D1', wing: '#FF8FBF', beak: '#FF8C42', speed: [4.6, 5.8] },
+    golden: { value: 3, scale: 1.05, body: '#FFCC1F', wing: '#E9A100', beak: '#FF7A2E', speed: [5.0, 6.0] },
+  };
+  const MESSAGES = ['Great job!', 'Super catch!', 'Quack-tastic!', 'Wow!', 'Duck champ!'];
+
+  // ---------- Elements ----------
+  const $ = (id) => document.getElementById(id);
+  const game = $('game'), ducksLayer = $('ducks'), bucket = $('bucket');
+  const hud = $('hud'), scoreEl = $('score'), scoreNum = $('scoreNum'), timerFill = $('timerFill');
+  const startScreen = $('startScreen'), endScreen = $('endScreen');
+  const playBtn = $('playBtn'), againBtn = $('againBtn');
+
+  // ---------- State ----------
+  let W = 0, H = 0, waterTop = 0, waterBottom = 0;
+  let state = 'menu';            // 'menu' | 'playing' | 'end'
+  let score = 0, elapsed = 0, spawnTimer = 0.3;
+  let best = readBest();
+  const ducks = [];
+
+  function readBest() {
+    try { return parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { return 0; }
+  }
+  function saveBest(v) {
+    try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* private mode */ }
+  }
+
+  // ---------- Duck drawing (inline SVG, facing right) ----------
+  function duckSVG(t) {
+    const sparkle = t === TYPES.golden ? `
+      <path class="twinkle" d="M14 18 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="#fff"/>
+      <path class="twinkle b" d="M88 8 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z" fill="#fff"/>
+      <path class="twinkle" d="M96 70 l2 4 4 2 -4 2 -2 4 -2 -4 -4 -2 4 -2z" fill="#fff"/>` : '';
+    return `<svg viewBox="0 0 104 96" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="52" cy="88" rx="42" ry="6" fill="#fff" opacity=".35"/>
+      <path d="M8 52 Q4 34 16 40 Q26 47 38 48 L70 48 Q94 48 94 66 Q92 86 62 88 L36 88 Q10 86 8 64 Z" fill="${t.body}"/>
+      <path d="M34 62 Q48 52 64 60 Q56 76 38 72 Z" fill="${t.wing}"/>
+      <circle cx="66" cy="32" r="21" fill="${t.body}"/>
+      <ellipse cx="58" cy="22" rx="7" ry="4" fill="#fff" opacity=".55" transform="rotate(-25 58 22)"/>
+      <path d="M83 30 Q101 29 101 37 Q96 45 82 43 Z" fill="${t.beak}"/>
+      <path d="M84 38 Q93 39 99 38" stroke="#d96a2a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <circle cx="73" cy="27" r="4" fill="#23415a"/>
+      <circle cx="74.4" cy="25.6" r="1.4" fill="#fff"/>
+      <circle cx="70" cy="38" r="4" fill="#ff8fa3" opacity=".5"/>
+      <path d="M16 74 Q20 80 28 80" stroke="#fff" stroke-opacity=".5" stroke-width="3" fill="none" stroke-linecap="round"/>
+      ${sparkle}
+    </svg>`;
+  }
+
+  function netSVG() {
+    return `<svg viewBox="0 0 120 140" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs><pattern id="mesh" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <path d="M0 0 H10 M0 0 V10" stroke="#fff" stroke-width="2" stroke-opacity=".85"/></pattern></defs>
+      <line x1="104" y1="2" x2="88" y2="48" stroke="#b07a3c" stroke-width="9" stroke-linecap="round"/>
+      <path d="M14 56 Q60 150 106 56" fill="url(#mesh)" stroke="#fff" stroke-opacity=".7" stroke-width="2"/>
+      <ellipse cx="60" cy="56" rx="47" ry="14" fill="none" stroke="#3aa0ff" stroke-width="7"/>
+    </svg>`;
+  }
+
+  $('startDuck').innerHTML = duckSVG(TYPES.normal);
+  document.querySelectorAll('.miniDuck').forEach(el => { el.innerHTML = duckSVG(TYPES.normal); });
+
+  // ---------- Layout ----------
+  function measure() {
+    const r = game.getBoundingClientRect();
+    W = r.width; H = r.height;
+    const water = $('water').getBoundingClientRect();
+    const bank = $('bank').getBoundingClientRect();
+    waterTop = water.top - r.top;
+    waterBottom = bank.top - r.top;
+  }
+  window.addEventListener('resize', measure);
+  window.addEventListener('orientationchange', () => setTimeout(measure, 300));
+  measure();
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  // ---------- Spawning ----------
+  function pickType(playing) {
+    const r = Math.random();
+    if (r < (playing ? 0.07 : 0.04)) return 'golden';
+    if (r < 0.27) return 'tiny';
+    return 'normal';
+  }
+
+  function spawnDuck() {
+    const playing = state === 'playing';
+    const kind = pickType(playing);
+    const t = TYPES[kind];
+    const progress = playing ? Math.min(elapsed / ROUND_SECONDS, 1) : 0;
+
+    const base = Math.min(W * 0.24, 112);
+    const top = waterTop + base * 0.45;
+    const bottom = waterBottom - base * 0.55;
+    if (bottom <= top) return;
+
+    // Pick a lane that isn't crowded near where this duck enters.
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    let y = rand(top, bottom);
+    for (let i = 0; i < 6; i++) {
+      const clash = ducks.some(d => !d.caught && d.dir === dir && Math.abs(d.baseY - y) < base * 0.7 &&
+        (dir > 0 ? d.x < W * 0.35 : d.x > W * 0.65));
+      if (!clash) break;
+      y = rand(top, bottom);
+    }
+
+    const depth = (y - top) / Math.max(bottom - top, 1);     // 0 = far, 1 = near
+    const size = base * t.scale * (0.82 + 0.18 * depth);
+    const hit = Math.max(size * 1.3, MIN_HIT);
+    const crossTime = rand(t.speed[0], t.speed[1]) * (1 - 0.18 * progress);
+    const speed = (W + hit * 2) / crossTime;
+
+    const el = document.createElement('div');
+    el.className = 'duck' + (kind === 'golden' ? ' golden' : '');
+    el.style.width = el.style.height = hit + 'px';
+    el.style.zIndex = String(10 + Math.round(y));
+    el.innerHTML = duckSVG(t);
+    const svg = el.firstChild;
+    svg.style.width = size + 'px';
+    svg.style.height = (size * 96 / 104) + 'px';
+
+    const d = {
+      el, svg, kind, value: t.value, size, hit, dir,
+      x: dir > 0 ? -hit / 2 : W + hit / 2,
+      y, baseY: y,
+      vx: speed * dir,
+      bobA: size * 0.06, bobF: rand(1.8, 2.6), phase: rand(0, Math.PI * 2),
+      caught: false,
+    };
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      catchDuck(d);
+    });
+    ducks.push(d);
+    ducksLayer.appendChild(el);
+    placeDuck(d, performance.now() / 1000);
+  }
+
+  function placeDuck(d, t) {
+    d.y = d.baseY + Math.sin(t * d.bobF + d.phase) * d.bobA;
+    const tilt = Math.sin(t * d.bobF * 1.3 + d.phase) * 7;
+    d.el.style.transform = `translate3d(${d.x - d.hit / 2}px, ${d.y - d.hit / 2}px, 0)`;
+    d.svg.style.transform = `scaleX(${d.dir}) rotate(${tilt}deg)`;
+  }
+
+  function removeDuck(d) {
+    const i = ducks.indexOf(d);
+    if (i >= 0) ducks.splice(i, 1);
+    d.el.remove();
+  }
+
+  // ---------- Catching ----------
+  function bucketCenter() {
+    const g = game.getBoundingClientRect();
+    const b = bucket.getBoundingClientRect();
+    return { x: b.left - g.left + b.width / 2, y: b.top - g.top + b.height * 0.4 };
+  }
+
+  function catchDuck(d) {
+    if (state !== 'playing' || d.caught) return;
+    d.caught = true;
+    d.el.style.zIndex = '4100';
+    d.el.style.cursor = 'default';
+
+    score += d.value;
+    scoreNum.textContent = score;
+    scoreEl.classList.remove('bump'); void scoreEl.offsetWidth; scoreEl.classList.add('bump');
+
+    popText('+' + d.value, d.x, d.y - d.size * 0.55, d.kind);
+    if (d.kind !== 'normal') sparkles(d.x, d.y, d.kind === 'golden' ? '✨' : '💖');
+
+    // Net swoops down over the duck.
+    const netW = Math.max(d.size * 1.35, 80), netH = netW * 140 / 120;
+    const net = document.createElement('div');
+    net.className = 'net';
+    net.style.width = netW + 'px'; net.style.height = netH + 'px';
+    net.style.left = (d.x - netW / 2) + 'px';
+    net.style.top = (d.y - netH * 0.42) + 'px';
+    net.innerHTML = netSVG();
+    game.appendChild(net);
+    const swoop = net.animate([
+      { transform: `translate(${netW * 0.5}px, ${-netH * 1.1}px) rotate(35deg)`, opacity: 0 },
+      { transform: 'translate(0, 0) rotate(-8deg)', opacity: 1, offset: 0.75 },
+      { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
+    ], { duration: 240, easing: 'ease-out', fill: 'forwards' });
+
+    swoop.onfinish = () => {
+      // Duck hops into the bucket in an arc; net lifts away.
+      const b = bucketCenter();
+      const from = `translate3d(${d.x - d.hit / 2}px, ${d.y - d.hit / 2}px, 0) scale(1)`;
+      const midX = (d.x + b.x) / 2, midY = Math.min(d.y, b.y) - Math.min(140, H * 0.18);
+      const mid = `translate3d(${midX - d.hit / 2}px, ${midY - d.hit / 2}px, 0) scale(.75) rotate(${d.dir * 180}deg)`;
+      const to = `translate3d(${b.x - d.hit / 2}px, ${b.y - d.hit / 2}px, 0) scale(.3) rotate(${d.dir * 360}deg)`;
+      const fly = d.el.animate([{ transform: from }, { transform: mid }, { transform: to, opacity: 0.9 }],
+        { duration: 520, easing: 'ease-in-out', fill: 'forwards' });
+      net.animate([
+        { transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
+        { transform: `translate(${-netW * 0.2}px, ${-netH * 0.6}px) rotate(-25deg)`, opacity: 0 },
+      ], { duration: 300, easing: 'ease-in', fill: 'forwards' }).onfinish = () => net.remove();
+      fly.onfinish = () => {
+        removeDuck(d);
+        bucket.classList.remove('wiggle'); void bucket.offsetWidth; bucket.classList.add('wiggle');
+      };
+    };
+  }
+
+  function popText(text, x, y, kind) {
+    const el = document.createElement('div');
+    el.className = 'pop' + (kind === 'golden' ? ' gold' : kind === 'tiny' ? ' pink' : '');
+    el.textContent = text;
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    game.appendChild(el);
+    el.animate([
+      { transform: 'translate(-50%, -50%) scale(.5)', opacity: 0 },
+      { transform: 'translate(-50%, -90%) scale(1.15)', opacity: 1, offset: 0.25 },
+      { transform: 'translate(-50%, -260%) scale(1)', opacity: 0 },
+    ], { duration: 900, easing: 'ease-out' }).onfinish = () => el.remove();
+  }
+
+  function sparkles(x, y, char) {
+    for (let i = 0; i < 6; i++) {
+      const s = document.createElement('div');
+      s.className = 'spark'; s.textContent = char;
+      s.style.left = x + 'px'; s.style.top = y + 'px';
+      game.appendChild(s);
+      const a = (i / 6) * Math.PI * 2 + rand(-0.3, 0.3), r = rand(40, 70);
+      s.animate([
+        { transform: 'translate(-50%, -50%) scale(.4)', opacity: 1 },
+        { transform: `translate(calc(-50% + ${Math.cos(a) * r}px), calc(-50% + ${Math.sin(a) * r}px)) scale(1)`, opacity: 0 },
+      ], { duration: 600, easing: 'ease-out' }).onfinish = () => s.remove();
+    }
+  }
+
+  // A friendly splash when tapping the water (no penalty).
+  game.addEventListener('pointerdown', (e) => {
+    if (state !== 'playing') return;
+    const g = game.getBoundingClientRect();
+    const x = e.clientX - g.left, y = e.clientY - g.top;
+    if (y < waterTop || y > waterBottom) return;
+    const r = document.createElement('div');
+    r.className = 'ripple';
+    r.style.left = x + 'px'; r.style.top = y + 'px';
+    game.appendChild(r);
+    r.animate([{ transform: 'scale(.3)', opacity: 1 }, { transform: 'scale(1.6)', opacity: 0 }],
+      { duration: 500, easing: 'ease-out' }).onfinish = () => r.remove();
+  });
+
+  // ---------- Round flow ----------
+  function showBest() {
+    const txt = '⭐ ' + best;
+    $('startBest').textContent = txt;
+    $('endBest').textContent = txt;
+    $('startBest').style.visibility = best > 0 ? 'visible' : 'hidden';
+  }
+
+  function startRound() {
+    if (state === 'playing') return;
+    measure();
+    // Clear the drifting background ducks so the round starts fresh.
+    ducks.slice().forEach(removeDuck);
+    score = 0; elapsed = 0; spawnTimer = 0.2;
+    scoreNum.textContent = '0';
+    timerFill.style.transform = 'scaleX(1)';
+    timerFill.classList.remove('low');
+    state = 'playing';
+    startScreen.classList.add('hidden');
+    endScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+  }
+
+  function endRound() {
+    state = 'end';
+    const isNewBest = score > best;
+    if (isNewBest) { best = score; saveBest(best); }
+    showBest();
+    $('endNum').textContent = score;
+    $('endMsg').textContent = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
+    const star = $('newBest');
+    star.classList.remove('show');
+    if (isNewBest) { void star.offsetWidth; star.classList.add('show'); }
+
+    // Brief pause so a flurry of taps doesn't instantly restart the game.
+    againBtn.disabled = true;
+    setTimeout(() => {
+      hud.classList.add('hidden');
+      endScreen.classList.remove('hidden');
+      setTimeout(() => { againBtn.disabled = false; }, 900);
+    }, 500);
+  }
+
+  function onButton(btn, fn) {
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!btn.disabled) fn(); });
+    btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+  }
+  onButton(playBtn, startRound);
+  onButton(againBtn, startRound);
+
+  // ---------- Main loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);   // clamp so a background tab doesn't jump
+    last = now;
+    const t = now / 1000;
+
+    if (state === 'playing') {
+      elapsed += dt;
+      const left = Math.max(0, 1 - elapsed / ROUND_SECONDS);
+      timerFill.style.transform = `scaleX(${left})`;
+      if (left < 0.2) timerFill.classList.add('low');
+      if (elapsed >= ROUND_SECONDS) endRound();
+    }
+
+    // Spawn: gentle ramp during a round, a few lazy ducks on the menu screens.
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) {
+      const active = ducks.filter(d => !d.caught).length;
+      if (state === 'playing') {
+        const p = Math.min(elapsed / ROUND_SECONDS, 1);
+        if (active < 6 + Math.round(p * 2)) spawnDuck();
+        spawnTimer = lerp(1.35, 0.75, p) * rand(0.7, 1.3);
+      } else {
+        if (active < 3) spawnDuck();
+        spawnTimer = rand(1.8, 3.2);
+      }
+    }
+
+    for (let i = ducks.length - 1; i >= 0; i--) {
+      const d = ducks[i];
+      if (d.caught) continue;
+      d.x += d.vx * dt;
+      if ((d.dir > 0 && d.x > W + d.hit) || (d.dir < 0 && d.x < -d.hit)) { removeDuck(d); continue; }
+      placeDuck(d, t);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- iOS: no pinch / double-tap zoom, no scroll bounce ----------
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
+    document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 350) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  showBest();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

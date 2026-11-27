@@ -203,6 +203,66 @@
   @keyframes starPop { from { transform: scale(0) rotate(-180deg); } to { transform: scale(1) rotate(0); } }
   @keyframes spin { 0%,100% { transform: rotate(-8deg) scale(1); } 50% { transform: rotate(8deg) scale(1.1); } }
 
+  /* ---------- Players ---------- */
+  .miniDuck svg { overflow: visible; }
+  .players {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;
+    max-width: 520px;
+  }
+  .playerCard, .choice, .smallBtn {
+    border: 0; font-family: inherit; color: inherit; cursor: pointer; touch-action: none;
+  }
+  .playerCard {
+    width: 92px; min-height: 116px; padding: 20px 6px 8px;
+    border-radius: 22px; background: #fff;
+    border: 4px solid transparent;
+    box-shadow: 0 3px 0 rgba(35, 65, 90, .15);
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px;
+    transition: transform .15s;
+  }
+  .playerCard .miniDuck { width: 58px; }
+  .playerCard.selected { border-color: #ffc93c; transform: scale(1.1); box-shadow: 0 5px 0 #f5ab1d; }
+  .pname {
+    font-size: 16px; font-weight: 800; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pbest { font-size: 14px; font-weight: 700; opacity: .75; }
+  .playerCard.add {
+    justify-content: center; font-size: 48px; font-weight: 900; color: #42c776;
+    border: 4px dashed #8fd6a4; background: rgba(255, 255, 255, .7);
+  }
+
+  #nameInput {
+    font: inherit; font-size: 26px; font-weight: 800; text-align: center;
+    width: min(80vw, 300px); padding: 10px 16px;
+    border-radius: 999px; border: 4px solid #fff; background: #fff; color: #23415a;
+    box-shadow: 0 3px 0 rgba(35, 65, 90, .15); outline: none;
+    -webkit-user-select: text; user-select: text; touch-action: manipulation;
+  }
+  #nameInput:focus { border-color: #ffc93c; }
+  #nameInput::placeholder { color: #9bb3c4; }
+  .choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 460px; }
+  .choice {
+    width: 48px; height: 48px; border-radius: 50%; padding: 0;
+    background: #fff; border: 4px solid #fff;
+    box-shadow: 0 3px 0 rgba(35, 65, 90, .15);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .15s;
+  }
+  .choice.selected { border-color: #23415a; transform: scale(1.12); }
+  .choice .swatch { width: 100%; height: 100%; border-radius: 50%; }
+  .choice svg { width: 36px; height: auto; overflow: visible; margin-top: 8px; }
+  .previewDuck { width: min(34vw, 140px, 18vh); }
+  .btnRow { display: flex; align-items: center; justify-content: center; gap: 22px; }
+  .smallBtn {
+    width: 72px; height: 72px; border-radius: 50%; background: #fff; font-size: 32px; line-height: 1;
+    box-shadow: 0 5px 0 rgba(35, 65, 90, .2);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .smallBtn:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(35, 65, 90, .2); }
+  .smallBtn[disabled] { opacity: .5; }
+  #startDuck { width: min(40vw, 180px, 22vh); }
+
   @media (prefers-reduced-motion: reduce) {
     .cloud, .waves, .edge, .bigDuck, .roundBtn { animation: none; }
   }
@@ -250,15 +310,30 @@
   <div id="startScreen" class="screen">
     <div class="bigDuck" id="startDuck"></div>
     <div class="title">Duck Catch</div>
+    <div class="players" id="playerList"></div>
     <button class="roundBtn" id="playBtn" aria-label="Play">▶</button>
-    <div class="pill" id="startBest">⭐ 0</div>
+  </div>
+
+  <div id="playerScreen" class="screen hidden">
+    <div class="bigDuck previewDuck" id="previewDuck"></div>
+    <input id="nameInput" type="text" maxlength="12" placeholder="Name" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done" aria-label="Player name">
+    <div class="choices" id="colorChoices" aria-label="Duck colour"></div>
+    <div class="choices" id="hatChoices" aria-label="Duck hat"></div>
+    <div class="btnRow">
+      <button class="smallBtn" id="cancelBtn" aria-label="Cancel">✕</button>
+      <button class="roundBtn" id="saveBtn" aria-label="Save player">✓</button>
+      <button class="smallBtn" id="deleteBtn" aria-label="Delete player">🗑</button>
+    </div>
   </div>
 
   <div id="endScreen" class="screen hidden">
     <div id="newBest">⭐</div>
     <div id="endCount"><span class="miniDuck big"></span><span id="endNum">0</span></div>
     <div id="endMsg">Great job!</div>
-    <button class="roundBtn" id="againBtn" aria-label="Play again">↻</button>
+    <div class="btnRow">
+      <button class="smallBtn" id="switchBtn" aria-label="Change player">👥</button>
+      <button class="roundBtn" id="againBtn" aria-label="Play again">↻</button>
+    </div>
     <div class="pill" id="endBest">⭐ 0</div>
   </div>
 </div>
@@ -269,14 +344,47 @@
 
   // ---------- Settings ----------
   const ROUND_SECONDS = 60;
-  const BEST_KEY = 'duckBest';
+  const STORE_KEY = 'duckPlayers';
+  const MAX_PLAYERS = 8;
+  const LONG_PRESS_MS = 700;     // hold a player card to edit or delete it
   const MIN_HIT = 76;            // px, minimum tap target for small fingers
   const TYPES = {
     normal: { value: 1, scale: 1.00, body: '#FFD93D', wing: '#F5B800', beak: '#FF8C42', speed: [6.5, 8.5] },
     tiny:   { value: 2, scale: 0.62, body: '#FFB3D1', wing: '#FF8FBF', beak: '#FF8C42', speed: [4.6, 5.8] },
     golden: { value: 3, scale: 1.05, body: '#FFCC1F', wing: '#E9A100', beak: '#FF7A2E', speed: [5.0, 6.0] },
   };
-  const MESSAGES = ['Great job!', 'Super catch!', 'Quack-tastic!', 'Wow!', 'Duck champ!'];
+  const MESSAGES = ['Great job', 'Super catch', 'Quack-tastic', 'Wow', 'Duck champ'];
+
+  // Avatar choices: a body colour plus a hat (drawn in the duck's 104x96 SVG space).
+  const COLORS = [
+    { body: '#FFD93D', wing: '#F5B800', beak: '#FF8C42' },   // yellow
+    { body: '#FFB3D1', wing: '#FF8FBF', beak: '#FF8C42' },   // pink
+    { body: '#8FD3FF', wing: '#55B4F0', beak: '#FF8C42' },   // blue
+    { body: '#A6E88A', wing: '#74C957', beak: '#FF8C42' },   // green
+    { body: '#C9A8FF', wing: '#A27BF2', beak: '#FF8C42' },   // purple
+    { body: '#FFB062', wing: '#F58E2A', beak: '#E8622A' },   // orange
+  ];
+  const HATS = [
+    '',
+    // crown
+    `<path d="M50 18 L51 0 L59 9 L66 -3 L73 9 L81 0 L82 18 Q66 13 50 18Z" fill="#FFD23F" stroke="#E0A800" stroke-width="2" stroke-linejoin="round"/>
+     <circle cx="66" cy="11" r="2.6" fill="#ff5d8f"/><circle cx="56" cy="13" r="2" fill="#3aa0ff"/><circle cx="76" cy="13" r="2" fill="#42c776"/>`,
+    // bow
+    `<path d="M64 13 L49 3 Q44 13 50 22 Z M64 13 L79 3 Q84 13 78 22 Z" fill="#FF6FA8" stroke="#E64E8D" stroke-width="2" stroke-linejoin="round"/>
+     <circle cx="64" cy="13" r="5" fill="#FF4F93"/>`,
+    // party hat
+    `<path d="M53 16 L68 -16 L81 17 Q67 11 53 16Z" fill="#7C6CFF"/>
+     <path d="M58 6 L76 6 M62 -3 L72 -3" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+     <circle cx="68" cy="-17" r="5.5" fill="#FFD23F"/>`,
+    // sunglasses
+    `<path d="M66 26 L46 23" stroke="#23415a" stroke-width="3" stroke-linecap="round"/>
+     <rect x="65" y="21" width="17" height="11" rx="5" fill="#23415a"/>
+     <path d="M69 24 L74 24" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".7"/>`,
+    // flower
+    `<g transform="translate(55 13)"><circle cx="0" cy="-7" r="5.5" fill="#FF9FCA"/><circle cx="6.7" cy="-2.2" r="5.5" fill="#FF9FCA"/>
+     <circle cx="4.1" cy="5.7" r="5.5" fill="#FF9FCA"/><circle cx="-4.1" cy="5.7" r="5.5" fill="#FF9FCA"/><circle cx="-6.7" cy="-2.2" r="5.5" fill="#FF9FCA"/>
+     <circle cx="0" cy="0" r="4.5" fill="#FFE066"/></g>`,
+  ];
 
   // ---------- Elements ----------
   const $ = (id) => document.getElementById(id);
@@ -289,18 +397,39 @@
   let W = 0, H = 0, waterTop = 0, waterBottom = 0;
   let state = 'menu';            // 'menu' | 'playing' | 'end'
   let score = 0, elapsed = 0, spawnTimer = 0.3;
-  let best = readBest();
   const ducks = [];
 
-  function readBest() {
-    try { return parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { return 0; }
+  // ---------- Players (saved on this device) ----------
+  // { players: [{ id, name, avatar: { color, hat }, best }], currentId }
+  let data = loadData();
+
+  function loadData() {
+    try {
+      const d = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (d && Array.isArray(d.players)) {
+        d.players = d.players.filter(p => p && p.id && typeof p.name === 'string');
+        d.players.forEach(p => {
+          p.best = Math.max(0, parseInt(p.best, 10) || 0);
+          p.avatar = p.avatar || { color: 0, hat: 0 };
+        });
+        if (!d.players.some(p => p.id === d.currentId)) d.currentId = d.players[0] ? d.players[0].id : null;
+        return d;
+      }
+    } catch (e) { /* bad JSON or private mode */ }
+    return { players: [], currentId: null };
   }
-  function saveBest(v) {
-    try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* private mode */ }
+  function saveData() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { /* private mode */ }
+  }
+  const currentPlayer = () => data.players.find(p => p.id === data.currentId) || null;
+
+  function avatarSVG(avatar) {
+    const a = avatar || { color: 0, hat: 0 };
+    return duckSVG(COLORS[a.color] || COLORS[0], HATS[a.hat] || '');
   }
 
   // ---------- Duck drawing (inline SVG, facing right) ----------
-  function duckSVG(t) {
+  function duckSVG(t, hat = '') {
     const sparkle = t === TYPES.golden ? `
       <path class="twinkle" d="M14 18 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="#fff"/>
       <path class="twinkle b" d="M88 8 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z" fill="#fff"/>
@@ -318,6 +447,7 @@
       <circle cx="70" cy="38" r="4" fill="#ff8fa3" opacity=".5"/>
       <path d="M16 74 Q20 80 28 80" stroke="#fff" stroke-opacity=".5" stroke-width="3" fill="none" stroke-linecap="round"/>
       ${sparkle}
+      ${hat}
     </svg>`;
   }
 
@@ -331,8 +461,6 @@
     </svg>`;
   }
 
-  $('startDuck').innerHTML = duckSVG(TYPES.normal);
-  document.querySelectorAll('.miniDuck').forEach(el => { el.innerHTML = duckSVG(TYPES.normal); });
 
   // ---------- Layout ----------
   function measure() {
@@ -520,55 +648,213 @@
       { duration: 500, easing: 'ease-out' }).onfinish = () => r.remove();
   });
 
-  // ---------- Round flow ----------
-  function showBest() {
-    const txt = '⭐ ' + best;
-    $('startBest').textContent = txt;
-    $('endBest').textContent = txt;
-    $('startBest').style.visibility = best > 0 ? 'visible' : 'hidden';
+  // ---------- Screens ----------
+  const playerScreen = $('playerScreen'), nameInput = $('nameInput');
+  const saveBtn = $('saveBtn'), cancelBtn = $('cancelBtn'), deleteBtn = $('deleteBtn'), switchBtn = $('switchBtn');
+
+  function showScreen(screen) {
+    [startScreen, playerScreen, endScreen].forEach(s => s.classList.toggle('hidden', s !== screen));
   }
 
+  function onButton(btn, fn) {
+    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!btn.disabled) fn(); });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!btn.disabled) fn(); }
+    });
+  }
+
+  // ---------- Start screen: who's playing? ----------
+  function renderStart() {
+    const list = $('playerList');
+    list.textContent = '';
+    data.players.forEach(p => {
+      const card = document.createElement('button');
+      card.className = 'playerCard' + (p.id === data.currentId ? ' selected' : '');
+      card.setAttribute('aria-label', p.name);
+      card.innerHTML = '<span class="miniDuck"></span><span class="pname"></span><span class="pbest"></span>';
+      card.querySelector('.miniDuck').innerHTML = avatarSVG(p.avatar);
+      card.querySelector('.pname').textContent = p.name;
+      card.querySelector('.pbest').textContent = '⭐ ' + p.best;
+      bindPlayerCard(card, p);
+      list.appendChild(card);
+    });
+    if (data.players.length < MAX_PLAYERS) {
+      const add = document.createElement('button');
+      add.className = 'playerCard add';
+      add.setAttribute('aria-label', 'New player');
+      add.textContent = '+';
+      onButton(add, () => openEditor(null));
+      list.appendChild(add);
+    }
+    const p = currentPlayer();
+    $('startDuck').innerHTML = avatarSVG(p && p.avatar);
+    playBtn.disabled = !p;
+  }
+
+  // Tap a card to pick that player; hold it to edit or delete.
+  function bindPlayerCard(card, p) {
+    let timer = null;
+    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    card.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      cancel();
+      timer = setTimeout(() => { timer = null; openEditor(p); }, LONG_PRESS_MS);
+    });
+    card.addEventListener('pointerup', () => { if (timer) { cancel(); selectPlayer(p.id); } });
+    card.addEventListener('pointerleave', cancel);
+    card.addEventListener('pointercancel', cancel);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectPlayer(p.id); }
+    });
+  }
+
+  function selectPlayer(id) {
+    data.currentId = id;
+    saveData();
+    renderStart();
+  }
+
+  // ---------- New / edit player ----------
+  let editing = null;                 // player being edited, or null for a new one
+  let draft = { color: 0, hat: 0 };
+
+  function openEditor(p) {
+    editing = p;
+    if (p) {
+      draft = { color: p.avatar.color, hat: p.avatar.hat };
+    } else {
+      // Start a new player on a colour nobody else has yet, so the kids' ducks look different.
+      const used = new Set(data.players.map(q => q.avatar.color));
+      const free = COLORS.findIndex((c, i) => !used.has(i));
+      draft = { color: free >= 0 ? free : 0, hat: 0 };
+    }
+    nameInput.value = p ? p.name : '';
+    deleteBtn.style.visibility = p ? 'visible' : 'hidden';
+    renderEditor();
+    showScreen(playerScreen);
+  }
+
+  function renderEditor() {
+    $('previewDuck').innerHTML = avatarSVG(draft);
+
+    const colors = $('colorChoices');
+    colors.textContent = '';
+    COLORS.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.className = 'choice' + (draft.color === i ? ' selected' : '');
+      b.setAttribute('aria-label', 'Colour ' + (i + 1));
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = `radial-gradient(circle at 35% 30%, ${c.body} 55%, ${c.wing})`;
+      b.appendChild(sw);
+      onButton(b, () => { nameInput.blur(); draft.color = i; renderEditor(); });
+      colors.appendChild(b);
+    });
+
+    const hats = $('hatChoices');
+    hats.textContent = '';
+    HATS.forEach((h, i) => {
+      const b = document.createElement('button');
+      b.className = 'choice' + (draft.hat === i ? ' selected' : '');
+      b.setAttribute('aria-label', 'Hat ' + (i + 1));
+      b.innerHTML = duckSVG(COLORS[draft.color], h);
+      onButton(b, () => { nameInput.blur(); draft.hat = i; renderEditor(); });
+      hats.appendChild(b);
+    });
+
+    saveBtn.disabled = !nameInput.value.trim();
+  }
+
+  function savePlayer() {
+    const name = nameInput.value.trim().slice(0, 12);
+    if (!name) { nameInput.focus(); return; }
+    nameInput.blur();
+    if (editing) {
+      editing.name = name;
+      editing.avatar = { ...draft };
+      data.currentId = editing.id;
+    } else {
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      data.players.push({ id, name, avatar: { ...draft }, best: 0 });
+      data.currentId = id;
+    }
+    saveData();
+    closeEditor();
+  }
+
+  function deletePlayer() {
+    if (!editing) return;
+    nameInput.blur();
+    if (!confirm(`Delete ${editing.name} and their best score?`)) return;
+    data.players = data.players.filter(p => p !== editing);
+    if (data.currentId === editing.id) data.currentId = data.players[0] ? data.players[0].id : null;
+    saveData();
+    closeEditor();
+  }
+
+  function closeEditor() {
+    nameInput.blur();
+    editing = null;
+    renderStart();
+    showScreen(startScreen);
+  }
+
+  nameInput.addEventListener('input', () => { saveBtn.disabled = !nameInput.value.trim(); });
+  nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); savePlayer(); } });
+  onButton(saveBtn, savePlayer);
+  onButton(cancelBtn, closeEditor);
+  onButton(deleteBtn, deletePlayer);
+
+  // ---------- Round flow ----------
   function startRound() {
     if (state === 'playing') return;
+    const p = currentPlayer();
+    if (!p) { openEditor(null); return; }
     measure();
     // Clear the drifting background ducks so the round starts fresh.
     ducks.slice().forEach(removeDuck);
     score = 0; elapsed = 0; spawnTimer = 0.2;
     scoreNum.textContent = '0';
+    scoreEl.querySelector('.miniDuck').innerHTML = avatarSVG(p.avatar);
     timerFill.style.transform = 'scaleX(1)';
     timerFill.classList.remove('low');
     state = 'playing';
-    startScreen.classList.add('hidden');
-    endScreen.classList.add('hidden');
+    showScreen(null);
     hud.classList.remove('hidden');
   }
 
   function endRound() {
     state = 'end';
-    const isNewBest = score > best;
-    if (isNewBest) { best = score; saveBest(best); }
-    showBest();
+    const p = currentPlayer();
+    const isNewBest = !!p && score > p.best;
+    if (isNewBest) { p.best = score; saveData(); }
+    $('endBest').textContent = '⭐ ' + (p ? p.best : score);
     $('endNum').textContent = score;
-    $('endMsg').textContent = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
+    endScreen.querySelector('.miniDuck').innerHTML = avatarSVG(p && p.avatar);
+    const msg = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
+    $('endMsg').textContent = p ? `${msg}, ${p.name}!` : msg + '!';
     const star = $('newBest');
     star.classList.remove('show');
     if (isNewBest) { void star.offsetWidth; star.classList.add('show'); }
 
     // Brief pause so a flurry of taps doesn't instantly restart the game.
-    againBtn.disabled = true;
+    againBtn.disabled = switchBtn.disabled = true;
     setTimeout(() => {
       hud.classList.add('hidden');
-      endScreen.classList.remove('hidden');
-      setTimeout(() => { againBtn.disabled = false; }, 900);
+      showScreen(endScreen);
+      setTimeout(() => { againBtn.disabled = switchBtn.disabled = false; }, 900);
     }, 500);
   }
 
-  function onButton(btn, fn) {
-    btn.addEventListener('pointerdown', (e) => { e.preventDefault(); if (!btn.disabled) fn(); });
-    btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+  function backToPlayers() {
+    state = 'menu';
+    renderStart();
+    showScreen(startScreen);
   }
+
   onButton(playBtn, startRound);
   onButton(againBtn, startRound);
+  onButton(switchBtn, backToPlayers);
 
   // ---------- Main loop ----------
   let last = performance.now();
@@ -622,7 +908,7 @@
   }, { passive: false });
   document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-  showBest();
+  renderStart();
   requestAnimationFrame(frame);
 })();
 </script>

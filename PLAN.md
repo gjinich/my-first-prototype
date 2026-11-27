@@ -33,10 +33,12 @@ A gentle, Duck Hunt-style game for a 7-year-old. Rubber ducks float across a bat
 - Bright, soft colours and smooth bobbing animation.
 
 ## Persistence
-- Best score kept in `localStorage` (`duckBest`) on this device.
+- Players kept in `localStorage` (`duckPlayers`) on this device: each has a name, a duck avatar (colour + hat) and their own best score.
+- Start screen: tap a player card to pick who's playing, **+** to add a player, **hold** a card to edit or delete it.
+- End screen: 👥 goes back to the player picker.
 
 ## Out of scope (v1)
-Sound, the child's name, levels, leaderboards, landscape layout.
+Sound, levels, leaderboards, landscape layout.
 
 ## Steps
 1. Scaffold `index.html`, `style.css`, `game.js`. Show the water scene and start screen.
